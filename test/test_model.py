@@ -229,6 +229,9 @@ class TestModel(unittest.TestCase):
         reserved1 = Parameter(name = "vol", expression = 0.5)
         with self.assertRaises(ModelError):
             model.add_parameter(reserved1)
+        reserved2 = Parameter(name = "e", expression = 0.5)
+        with self.assertRaises(ModelError):
+            model.add_parameter(reserved2)
         #Add this to name checks, python naming convention
         #numeric2 = Parameter(name = '1parameter', expression = 0.5)
         #with self.assertRaises(ModelError):

@@ -145,7 +145,8 @@ class Model(SortableObject, Jsonify):
     """
 
     # reserved names for model species/parameter names, volume, and operators.
-    reserved_names = ['vol']
+    # 'e' is reserved because propensity expressions replace it with Euler's number.
+    reserved_names = ['vol', 'e']
     special_characters = ['[', ']', '+', '-', '*', '/', '.', '^']
 
     def __init__(self, name="", population=True, volume=1.0, tspan=None, annotation="model"):
