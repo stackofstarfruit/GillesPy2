@@ -19,6 +19,7 @@
 import copy
 import math
 import secrets
+import time
 import numpy as np
 from gillespy2.core import GillesPySolver, Model, Parameter, Reaction, Results, Species, Trajectory
 from ._kernels import dispatch
@@ -94,18 +95,33 @@ def _validate(model):
     return dict(model._conditional_spec), grid.copy()
 
 
+def _run_general(case, n, s):
+    from .general import reservoir
+    if case['N'] * (case['cap'] + 1) * 4 * 8 > 128 * 1024**2:
+        raise ValueError('registered output memory limit')
+    started = time.perf_counter()
+    dispatch.native_only.seed(s)
+    rows, counts, status, work = reservoir.spectral_paths(case, n)
+    meta = dict(requested='general', pilot_paths=0, selected='general', spectral=work,
+                elapsed_s=time.perf_counter() - started)
+    return rows, counts, status, meta
+
+
 class ConditionalReservoirSolver(GillesPySolver):
     """Returns GillesPy Results with keys time,Y; I is deliberately absent.
 
     method: auto (retained-pilot selector), conditional (force block backend),
-    native (compiled reference). Resource/numerical failures raise for the whole
+    native (compiled reference), general (block backend that also handles
+    reducible hidden blocks, b = 0 or e = 0, by strongly connected components
+    instead of native fallback; irreducible blocks use the same kernels as
+    conditional). Resource/numerical failures raise for the whole
     request, so successful prefixes cannot silently become selected samples.
     """
     name = "ConditionalReservoirSolver"
 
     def __init__(self, model=None, method='auto'):
-        if method not in ('auto', 'conditional', 'native'):
-            raise ValueError("method must be auto, conditional or native")
+        if method not in ('auto', 'conditional', 'native', 'general'):
+            raise ValueError("method must be auto, conditional, native or general")
         _validate(model)
         self.model = copy.deepcopy(model)
         self.method = method
@@ -132,7 +148,10 @@ class ConditionalReservoirSolver(GillesPySolver):
         case = dict(spec, threshold=spec['H']+1, T=float(grid[-1]), N=n, cap=cap)
         self.event_histories = None
         self.diagnostics = None
-        rows, counts, status, meta = dispatch.run(case, 'spectral' if self.method == 'conditional' else self.method, s)
+        if self.method == 'general':
+            rows, counts, status, meta = _run_general(case, n, s)
+        else:
+            rows, counts, status, meta = dispatch.run(case, 'spectral' if self.method == 'conditional' else self.method, s)
         meta.update(statuses={str(int(v)): int(np.sum(status == v)) for v in np.unique(status)}, seed=s,
                     requested_output=['time', 'Y'], hidden_snapshots=False)
         self.diagnostics = meta
